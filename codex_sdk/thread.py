@@ -158,19 +158,14 @@ class Thread:
         try:
             if turn_options.output_schema:
                 # Create temp file with restricted permissions (owner read/write only)
-                # Use mode 0o600 for security
+                # mkstemp creates files with 0o600 permissions by default for security
                 import os
-                fd = os.open(
-                    tempfile.gettempdir() + '/codex_schema_XXXXXX.json',
-                    os.O_CREAT | os.O_WRONLY | os.O_EXCL,
-                    0o600
-                )
-                # Actually use mkstemp for proper temp file creation
                 fd, schema_file_path = tempfile.mkstemp(
                     suffix='.json',
                     prefix='codex_schema_',
                     text=True,
                 )
+                # Write schema to the temp file
                 with os.fdopen(fd, 'w') as temp_file:
                     json.dump(turn_options.output_schema, temp_file)
             
