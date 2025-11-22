@@ -7,8 +7,8 @@ The Python SDK wraps the bundled `codex` binary. It spawns the CLI and exchanges
 JSONL events over stdin/stdout.
 """
 
-from .codex import Codex
-from .thread import Thread, Turn, StreamedTurn, UserInput, Input
+from .codex import Codex, CodexOptions
+from .thread import Thread, ThreadOptions, TurnOptions, Turn, StreamedTurn, UserInput, Input
 from .events import (
     ThreadEvent,
     ThreadStartedEvent,
@@ -38,7 +38,10 @@ __version__ = "0.1.0"
 
 __all__ = [
     "Codex",
+    "CodexOptions",
     "Thread",
+    "ThreadOptions",
+    "TurnOptions",
     "Turn",
     "StreamedTurn",
     "UserInput",
