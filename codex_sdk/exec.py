@@ -1,5 +1,6 @@
 """Execution layer that spawns the Codex CLI binary."""
 
+import asyncio
 import os
 import platform
 import subprocess
@@ -149,49 +150,81 @@ class CodexExec:
         if args.api_key:
             env["CODEX_API_KEY"] = args.api_key
         
-        # Spawn the process
-        process = subprocess.Popen(
-            [self.executable_path] + command_args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+        # Spawn the process using asyncio
+        process = await asyncio.create_subprocess_exec(
+            self.executable_path,
+            *command_args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             env=env,
-            text=True,
-            bufsize=1,  # Line buffered
         )
+        
+        stderr_output = []
+        
+        async def capture_stderr():
+            """Capture stderr output asynchronously."""
+            if process.stderr:
+                async for line in process.stderr:
+                    stderr_output.append(line.decode('utf-8', errors='replace'))
+        
+        # Start capturing stderr in the background
+        stderr_task = asyncio.create_task(capture_stderr())
         
         try:
             # Write input to stdin
             if process.stdin:
-                process.stdin.write(args.input)
+                process.stdin.write(args.input.encode('utf-8'))
+                await process.stdin.drain()
                 process.stdin.close()
+                await process.stdin.wait_closed()
             
-            # Read lines from stdout
+            # Read lines from stdout asynchronously
             if process.stdout:
-                for line in process.stdout:
-                    line = line.rstrip('\n\r')
+                async for line_bytes in process.stdout:
+                    line = line_bytes.decode('utf-8', errors='replace').rstrip('\n\r')
                     if line:
                         yield line
             
             # Wait for process to complete
-            return_code = process.wait()
+            return_code = await process.wait()
+            
+            # Wait for stderr capture to complete
+            await stderr_task
             
             if return_code != 0:
-                stderr_output = ""
-                if process.stderr:
-                    stderr_output = process.stderr.read()
+                stderr_text = ''.join(stderr_output)
                 raise RuntimeError(
-                    f"Codex Exec exited with code {return_code}: {stderr_output}"
+                    f"Codex Exec exited with code {return_code}: {stderr_text}"
                 )
+        
+        except asyncio.CancelledError:
+            # Handle cancellation gracefully
+            if process.returncode is None:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
+            raise
         
         finally:
             # Cleanup
-            if process.poll() is None:
+            if not stderr_task.done():
+                stderr_task.cancel()
+                try:
+                    await stderr_task
+                except asyncio.CancelledError:
+                    pass
+            
+            if process.returncode is None:
                 process.terminate()
                 try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
                     process.kill()
+                    await process.wait()
     
     def _find_codex_path(self) -> str:
         """

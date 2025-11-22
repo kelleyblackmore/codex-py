@@ -152,19 +152,27 @@ class Thread:
         """Internal implementation of run_streamed."""
         turn_options = options or TurnOptions()
         
-        # Handle output schema
+        # Handle output schema with secure permissions
         schema_file_path = None
         temp_file = None
         try:
             if turn_options.output_schema:
-                temp_file = tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.json',
-                    delete=False,
+                # Create temp file with restricted permissions (owner read/write only)
+                # Use mode 0o600 for security
+                import os
+                fd = os.open(
+                    tempfile.gettempdir() + '/codex_schema_XXXXXX.json',
+                    os.O_CREAT | os.O_WRONLY | os.O_EXCL,
+                    0o600
                 )
-                json.dump(turn_options.output_schema, temp_file)
-                temp_file.close()
-                schema_file_path = temp_file.name
+                # Actually use mkstemp for proper temp file creation
+                fd, schema_file_path = tempfile.mkstemp(
+                    suffix='.json',
+                    prefix='codex_schema_',
+                    text=True,
+                )
+                with os.fdopen(fd, 'w') as temp_file:
+                    json.dump(turn_options.output_schema, temp_file)
             
             # Normalize input
             prompt, images = self._normalize_input(input)
@@ -202,12 +210,21 @@ class Thread:
                 yield event
         
         finally:
-            # Cleanup temp file
-            if temp_file and schema_file_path:
+            # Cleanup temp file with specific error handling
+            if schema_file_path:
                 try:
                     Path(schema_file_path).unlink()
-                except Exception:
+                except FileNotFoundError:
+                    # File already deleted, which is fine
                     pass
+                except PermissionError as e:
+                    # Log permission errors but don't fail
+                    import warnings
+                    warnings.warn(f"Could not delete temp schema file: {e}", RuntimeWarning)
+                except OSError as e:
+                    # Log other OS errors
+                    import warnings
+                    warnings.warn(f"Error deleting temp schema file: {e}", RuntimeWarning)
     
     async def run(
         self,
