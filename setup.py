@@ -1,4 +1,4 @@
-"""Setup script for codex-sdk package."""
+"""Setup script for codex-py package."""
 
 from setuptools import setup
 

@@ -9,7 +9,7 @@ This is a Python port of the [TypeScript SDK](https://github.com/openai/codex/tr
 ## Installation
 
 ```bash
-pip install codex-sdk
+pip install codex-py
 ```
 
 Requires Python 3.8+.

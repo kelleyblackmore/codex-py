@@ -6,7 +6,7 @@ This package provides a Python SDK for the OpenAI Codex agent, mirroring the fun
 ## Installation
 
 ```bash
-pip install codex-sdk
+pip install codex-py
 ```
 
 **Prerequisites**: The Codex CLI must be installed separately:
